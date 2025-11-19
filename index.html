@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Mini Insta – Auth Demo</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #0f172a;
+      color: #e5e7eb;
+      display: flex;
+      justify-content: center;
+      padding: 2rem;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 800px;
+      background: #020617;
+      border-radius: 1rem;
+      padding: 1.5rem 2rem;
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+      border: 1px solid #1f2937;
+    }
+
+    h1 {
+      text-align: center;
+      margin-bottom: 1rem;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+    }
+
+    .card {
+      background: #020617;
+      border-radius: 0.75rem;
+      padding: 1rem;
+      border: 1px solid #1f2937;
+    }
+
+    h2 {
+      margin-top: 0;
+      font-size: 1.1rem;
+      margin-bottom: 0.75rem;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 0.25rem;
+      font-size: 0.9rem;
+    }
+
+    input {
+      width: 100%;
+      padding: 0.4rem 0.5rem;
+      margin-bottom: 0.6rem;
+      border-radius: 0.4rem;
+      border: 1px solid #4b5563;
+      background: #020617;
+      color: #e5e7eb;
+    }
+
+    button {
+      padding: 0.4rem 0.8rem;
+      border-radius: 0.4rem;
+      border: none;
+      cursor: pointer;
+      font-weight: 500;
+      background: #22c55e;
+      color: #022c22;
+    }
+
+    button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .section-title {
+      margin-top: 1rem;
+      font-size: 0.95rem;
+      font-weight: 600;
+    }
+
+    .log {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      font-size: 0.8rem;
+      background: #020617;
+      border-radius: 0.5rem;
+      border: 1px solid #1f2937;
+      padding: 0.5rem;
+      max-height: 200px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+    }
+
+    .token-box {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      font-size: 0.75rem;
+      background: #020617;
+      border-radius: 0.5rem;
+      border: 1px solid #1f2937;
+      padding: 0.5rem;
+      word-break: break-all;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Mini Insta – Login Demo</h1>
+
+    <div class="grid">
+      <!-- Registration -->
+      <div class="card">
+        <h2>Register</h2>
+        <form id="register-form">
+          <label for="reg-username">Username</label>
+          <input id="reg-username" name="username" required />
+
+          <label for="reg-fullname">Full name</label>
+          <input id="reg-fullname" name="full_name" />
+
+          <label for="reg-password">Password</label>
+          <input id="reg-password" name="password" type="password" required />
+
+          <button type="submit">Register</button>
+        </form>
+      </div>
+
+      <!-- Login -->
+      <div class="card">
+        <h2>Login</h2>
+        <form id="login-form">
+          <label for="login-username">Username</label>
+          <input id="login-username" name="username" required />
+
+          <label for="login-password">Password</label>
+          <input id="login-password" name="password" type="password" required />
+
+          <button type="submit">Login</button>
+        </form>
+      </div>
+    </div>
+
+    <div style="margin-top: 1.5rem;">
+      <div class="section-title">Access token (after login)</div>
+      <div id="token-box" class="token-box">No token yet.</div>
+    </div>
+
+    <div style="margin-top: 1.5rem;">
+      <div class="section-title">Current user (/me)</div>
+      <button id="me-button">Fetch my profile</button>
+      <div id="me-output" class="log" style="margin-top: 0.5rem;">No profile fetched yet.</div>
+    </div>
+
+    <div style="margin-top: 1.5rem;">
+      <div class="section-title">Log</div>
+      <div id="log" class="log"></div>
+    </div>
+  </div>
+
+  <script>
+    const logEl = document.getElementById("log");
+    const tokenBox = document.getElementById("token-box");
+    const meOutput = document.getElementById("me-output");
+
+    let accessToken = null;
+
+    function log(message) {
+      const timestamp = new Date().toLocaleTimeString();
+      logEl.textContent += `[${timestamp}] ${message}\n`;
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    // --------------------
+    // Registration
+    // --------------------
+    document.getElementById("register-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+
+      const username = document.getElementById("reg-username").value.trim();
+      const full_name = document.getElementById("reg-fullname").value.trim();
+      const password = document.getElementById("reg-password").value;
+
+      if (!username || !password) {
+        log("Registration: username and password required.");
+        return;
+      }
+
+      try {
+        // Our backend expects:
+        // - JSON body: { "username": "...", "full_name": "..." }
+        // - Query param: ?password=...
+        const body = { username, full_name };
+        const resp = await fetch(`/auth/register?password=${encodeURIComponent(password)}`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(body),
+        });
+
+        const data = await resp.json();
+
+        if (!resp.ok) {
+          log(`Registration failed: ${resp.status} ${JSON.stringify(data)}`);
+        } else {
+          log(`Registration OK: ${JSON.stringify(data)}`);
+        }
+      } catch (err) {
+        console.error(err);
+        log(`Registration error: ${err}`);
+      }
+    });
+
+    // --------------------
+    // Login
+    // --------------------
+    document.getElementById("login-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+
+      const username = document.getElementById("login-username").value.trim();
+      const password = document.getElementById("login-password").value;
+
+      if (!username || !password) {
+        log("Login: username and password required.");
+        return;
+      }
+
+      try {
+        // OAuth2PasswordRequestForm expects form-encoded data
+        const formData = new URLSearchParams();
+        formData.append("username", username);
+        formData.append("password", password);
+
+        const resp = await fetch("/auth/login", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+          },
+          body: formData.toString(),
+        });
+
+        const data = await resp.json();
+
+        if (resp.ok) {
+          accessToken = data.access_token;
+          tokenBox.textContent = accessToken || "No token received.";
+          log(`Login OK – token received.`);
+        } else {
+          log(`Login failed: ${resp.status} ${JSON.stringify(data)}`);
+          accessToken = null;
+          tokenBox.textContent = "No token (login failed).";
+        }
+      } catch (err) {
+        console.error(err);
+        log(`Login error: ${err}`);
+      }
+    });
+
+    // --------------------
+    // Fetch /me
+    // --------------------
+    document.getElementById("me-button").addEventListener("click", async () => {
+      if (!accessToken) {
+        log("Cannot call /me: no access token (login first).");
+        meOutput.textContent = "Please login first.";
+        return;
+      }
+
+      try {
+        const resp = await fetch("/me", {
+          method: "GET",
+          headers: {
+            "Authorization": `Bearer ${accessToken}`,
+          },
+        });
+
+        const data = await resp.json();
+
+        if (!resp.ok) {
+          log(`/me failed: ${resp.status} ${JSON.stringify(data)}`);
+          meOutput.textContent = JSON.stringify(data, null, 2);
+        } else {
+          log(`/me OK`);
+          meOutput.textContent = JSON.stringify(data, null, 2);
+        }
+      } catch (err) {
+        console.error(err);
+        log(`/me error: ${err}`);
+        meOutput.textContent = String(err);
+      }
+    });
+  </script>
+</body>
+</html>
