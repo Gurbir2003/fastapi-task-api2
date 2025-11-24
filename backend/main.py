@@ -1,6 +1,8 @@
-from fastapi import FastAPI, HTTPException, Depends
+# backend/main.py
+from fastapi import FastAPI, HTTPException, Depends, Response, Request
+from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel
 from passlib.context import CryptContext
 from jose import JWTError, jwt
@@ -10,7 +12,8 @@ from typing import Optional
 
 import os
 
-from .db import init_db, get_user_row, insert_user_row
+# ✅ important change: import db via the backend package
+from backend.db import init_db, get_user_row, insert_user_row
 
 # Basic app setup
 
@@ -30,13 +33,13 @@ ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES"))
 # password hashing setup
 pwd_context = CryptContext(schemes=["sha256_crypt"], deprecated="auto")
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
-
 # Paths
-
 BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_DIR = os.path.dirname(BACKEND_DIR)
 FRONTEND_DIR = os.path.join(PROJECT_DIR, "frontend")
+
+# Serve the frontend folder at /frontend and the main page at /
+app.mount("/frontend", StaticFiles(directory=FRONTEND_DIR), name="frontend")
 
 # make sure the DB + table exist before we start handling requests
 init_db()
@@ -46,7 +49,6 @@ init_db()
 def serve_frontend():
     """
     Returns the main index.html file for the small frontend.
-    This just serves the static file and doesn't do anything else.
     """
     return FileResponse(os.path.join(FRONTEND_DIR, "index.html"))
 
@@ -156,13 +158,6 @@ def authenticate_user(username: str, password: str) -> Optional[UserInDB]:
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     """
     Creates a JWT access token with an expiration time.
-
-    Args:
-        data: The payload to encode inside the token (e.g., {"sub": username}).
-        expires_delta: Optional timedelta for the token expiry.
-
-    Returns:
-        Encoded JWT token as a string.
     """
     to_encode = data.copy()
     now = datetime.now(timezone.utc)
@@ -201,10 +196,10 @@ def register_user(user: User, password: str):
 
 
 @app.post("/auth/login", response_model=Token)
-def login(form_data: OAuth2PasswordRequestForm = Depends()):
+def login(response: Response, form_data: OAuth2PasswordRequestForm = Depends()):
     """
     Logs the user in using form data.
-    If valid, returns a JWT token.
+    If valid, returns a JWT token and also sets it in a cookie.
     """
     user = authenticate_user(form_data.username, form_data.password)
 
@@ -222,38 +217,54 @@ def login(form_data: OAuth2PasswordRequestForm = Depends()):
         expires_delta=access_token_expires,
     )
 
+    # Store token in a cookie so the browser "remembers" it.
+    response.set_cookie(
+        key="access_token",
+        value=token,
+        httponly=True,
+        samesite="lax",
+        max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+    )
+
     return Token(access_token=token)
 
 
-async def get_current_user(token: str = Depends(oauth2_scheme)) -> User:
+async def get_current_user(request: Request) -> User:
     """
-    Validates the provided JWT token and loads the associated user.
-
-    Returns:
-        User model if token is valid.
-
-    Raises:
-        HTTPException if token is invalid or expired.
+    Validates the JWT in the access_token cookie and loads the associated user.
     """
-    credentials_exception = HTTPException(
-        status_code=401,
-        detail="Could not validate credentials",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
+    token = request.cookies.get("access_token")
+
+    if not token:
+        raise HTTPException(
+            status_code=401,
+            detail="Not authenticated",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         username: str = payload.get("sub")
-
         if username is None:
-            raise credentials_exception
-
+            raise HTTPException(
+                status_code=401,
+                detail="Could not validate credentials",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
     except JWTError:
-        raise credentials_exception
+        raise HTTPException(
+            status_code=401,
+            detail="Could not validate credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
     user = get_user(username)
     if user is None:
-        raise credentials_exception
+        raise HTTPException(
+            status_code=401,
+            detail="User not found",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
     return User(
         username=user.username,
@@ -267,7 +278,6 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> User:
 @app.get("/me", response_model=User)
 async def read_me(current_user: User = Depends(get_current_user)):
     """
-    Returns the currently logged-in user.
-    Requires the Authorization: Bearer <token> header.
+    Returns the currently logged-in user, using the JWT stored in the cookie.
     """
     return current_user
