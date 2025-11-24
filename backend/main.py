@@ -12,7 +12,6 @@ from typing import Optional
 
 import os
 
-# ✅ important change: import db via the backend package
 from backend.db import init_db, get_user_row, insert_user_row
 
 # Basic app setup

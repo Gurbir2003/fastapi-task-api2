@@ -1,6 +1,4 @@
-// --------------------
-// "Component" for auth panel
-// --------------------
+// Render the auth panel into the placeholder div
 function renderAuthPanel() {
   const root = document.getElementById("auth-root");
   root.innerHTML = `
@@ -59,15 +57,14 @@ const meOutput = document.getElementById("me-output");
 
 let accessToken = null;
 
+// Simple logger for the bottom log box
 function log(message) {
   const timestamp = new Date().toLocaleTimeString();
   logEl.textContent += `[${timestamp}] ${message}\n`;
   logEl.scrollTop = logEl.scrollHeight;
 }
 
-// --------------------
-// Registration
-// --------------------
+// Handle registration form submission
 document.getElementById("register-form").addEventListener("submit", async (e) => {
   e.preventDefault();
 
@@ -109,9 +106,7 @@ document.getElementById("register-form").addEventListener("submit", async (e) =>
   }
 });
 
-// --------------------
-// Login
-// --------------------
+// Handle login form submission
 document.getElementById("login-form").addEventListener("submit", async (e) => {
   e.preventDefault();
 
@@ -138,12 +133,12 @@ document.getElementById("login-form").addEventListener("submit", async (e) => {
     });
 
     const data = await resp.json();
-    console.log(data)
+    console.log(data);
 
     if (resp.ok) {
       accessToken = data.access_token;
       tokenBox.textContent = accessToken || "No token received.";
-      log(`Login OK – token received.`);
+      log("Login OK – token received.");
       window.location.href = "/me";
     } else {
       log(`Login failed: ${resp.status} ${JSON.stringify(data)}`);
@@ -156,9 +151,7 @@ document.getElementById("login-form").addEventListener("submit", async (e) => {
   }
 });
 
-// --------------------
-// Fetch /me
-// --------------------
+// Call /me and show the result in a log-style box
 document.getElementById("me-button").addEventListener("click", async () => {
   if (!accessToken) {
     log("Cannot call /me: no access token (login first).");
@@ -180,7 +173,7 @@ document.getElementById("me-button").addEventListener("click", async () => {
       log(`/me failed: ${resp.status} ${JSON.stringify(data)}`);
       meOutput.textContent = JSON.stringify(data, null, 2);
     } else {
-      log(`/me OK`);
+      log("/me OK");
       meOutput.textContent = JSON.stringify(data, null, 2);
     }
   } catch (err) {
