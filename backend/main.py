@@ -9,13 +9,12 @@ from jose import JWTError, jwt
 from dotenv import load_dotenv
 from datetime import datetime, timedelta, timezone
 from typing import Optional
-
 import os
 
 from backend.db import init_db, get_user_row, insert_user_row
 
-# Basic app setup
 
+# FastAPI app setup
 app = FastAPI(
     title="Mini Insta API",
     description="A tiny social network backend demo with basic login.",
@@ -24,15 +23,15 @@ app = FastAPI(
 
 load_dotenv(override=True)
 
-# reading values from the .env file
+# Read values from the .env file
 SECRET_KEY = os.getenv("SECRET_KEY")
 ALGORITHM = os.getenv("ALGORITHM")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES"))
 
-# password hashing setup
+# Password hashing setup
 pwd_context = CryptContext(schemes=["sha256_crypt"], deprecated="auto")
 
-# Paths
+# Paths for backend and frontend
 BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_DIR = os.path.dirname(BACKEND_DIR)
 FRONTEND_DIR = os.path.join(PROJECT_DIR, "frontend")
@@ -40,16 +39,25 @@ FRONTEND_DIR = os.path.join(PROJECT_DIR, "frontend")
 # Serve the frontend folder at /frontend and the main page at /
 app.mount("/frontend", StaticFiles(directory=FRONTEND_DIR), name="frontend")
 
-# make sure the DB + table exist before we start handling requests
+# Make sure the DB + table exist before we start handling requests
 init_db()
 
 
 @app.get("/", include_in_schema=False)
 def serve_frontend():
     """
-    Returns the main index.html file for the small frontend.
+    Return the main index.html file for the small frontend.
     """
     return FileResponse(os.path.join(FRONTEND_DIR, "index.html"))
+
+
+@app.get("/me", include_in_schema=False)
+def serve_me_page():
+    """
+    Serve the user dashboard page (me.html).
+    The actual user data is fetched by the frontend from /api/me.
+    """
+    return FileResponse(os.path.join(FRONTEND_DIR, "me.html"))
 
 
 # Pydantic models
@@ -84,16 +92,14 @@ class Token(BaseModel):
 
 def get_password_hash(password: str) -> str:
     """
-    Takes a plain password and returns a hashed version of it.
-    Uses passlib under the hood.
+    Take a plain password and return a hashed version of it.
     """
     return pwd_context.hash(password)
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """
-    Compares a plain password with the hashed version.
-    Returns True if they match.
+    Compare a plain password with the hashed version and return True if they match.
     """
     return pwd_context.verify(plain_password, hashed_password)
 
@@ -143,8 +149,8 @@ def create_user(user: User, hashed_password: str) -> UserInDB:
 
 def authenticate_user(username: str, password: str) -> Optional[UserInDB]:
     """
-    Checks if a user exists and if the password is correct.
-    Returns the user object if authentication succeeds.
+    Check if a user exists and if the password is correct.
+    Return the user object if authentication succeeds.
     """
     user = get_user(username)
     if not user:
@@ -156,7 +162,7 @@ def authenticate_user(username: str, password: str) -> Optional[UserInDB]:
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     """
-    Creates a JWT access token with an expiration time.
+    Create a JWT access token with an expiration time.
     """
     to_encode = data.copy()
     now = datetime.now(timezone.utc)
@@ -172,7 +178,7 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
 @app.post("/auth/register", response_model=User)
 def register_user(user: User, password: str):
     """
-    Registers a new user in the database.
+    Register a new user in the database.
 
     Note:
         Password comes as a separate query parameter for simplicity.
@@ -197,8 +203,8 @@ def register_user(user: User, password: str):
 @app.post("/auth/login", response_model=Token)
 def login(response: Response, form_data: OAuth2PasswordRequestForm = Depends()):
     """
-    Logs the user in using form data.
-    If valid, returns a JWT token and also sets it in a cookie.
+    Log the user in using form data.
+    If valid, return a JWT token and also set it in a cookie.
     """
     user = authenticate_user(form_data.username, form_data.password)
 
@@ -230,7 +236,7 @@ def login(response: Response, form_data: OAuth2PasswordRequestForm = Depends()):
 
 async def get_current_user(request: Request) -> User:
     """
-    Validates the JWT in the access_token cookie and loads the associated user.
+    Validate the JWT in the access_token cookie and load the associated user.
     """
     token = request.cookies.get("access_token")
 
@@ -274,9 +280,10 @@ async def get_current_user(request: Request) -> User:
     )
 
 
-@app.get("/me", response_model=User)
+@app.get("/api/me", response_model=User)
 async def read_me(current_user: User = Depends(get_current_user)):
     """
-    Returns the currently logged-in user, using the JWT stored in the cookie.
+    Return the currently logged-in user, using the JWT stored in the cookie.
+    This is the JSON API endpoint the dashboard will call.
     """
     return current_user
